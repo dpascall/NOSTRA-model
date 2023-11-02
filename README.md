@@ -1,2 +1,2 @@
-# SONIIC-model
-Repository for the SONIIC model code
+# NOSTRA-model
+Repository for the NOSTRA model code
