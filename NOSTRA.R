@@ -99,12 +99,18 @@ pure_a2b_likelihood <- function(sharedlocation, symptomdate_B, symptomdate_A, se
 ##main body - calls individual likelihood models
 likelihood_model <- function(epidata, locationdata, priors, number_of_hypotheses, hypothesis, startdate, pureA2B) {
   function_vector <- rep(1, number_of_hypotheses - 2)
+  l_prime <- rep(-Inf, length(function_vector))
   if (is.numeric(hypothesis)) {
     function_vector[hypothesis] <- 2
+    if (epidata$patient_study_id[1] %in% colnames(locationdata)) {
+      if (length(generate_location(targetA = epidata$patient_study_id[hypothesis + 1], targetB = epidata$patient_study_id[1],
+                        startdate = startdate, enddate = epidata$onset_date[1], locationmatrix = locationdata)) == 0) {
+        return(sum(l_prime))
+      }
+    }
   } else {
     function_vector <- c(function_vector, 3)
   }
-  l_prime <- rep(-Inf, length(function_vector))
   for (q in 1:length(function_vector)) {
     if (function_vector[q] == 1) {
       if (!is.na(epidata$snpdifference[q + 1]) & !is.na(epidata$detection[q + 1])) {
@@ -232,61 +238,136 @@ run_model <- function(epidata, locationdata, snpdistmat, timedistmat, priors, st
   hypotheses <- as.list(1:number_of_hypotheses)
   hypotheses[[number_of_hypotheses]] <- "C"
   hypotheses[[number_of_hypotheses-1]] <- "H"
-  if (all_comparisons == F) {
-    hypliks <- rep(NA, number_of_hypotheses)
-    epidata$snpdifference <- NA
-    epidata$timedifference <- NA
-    for (j in 1:nrow(epidata)) {
-      epidata$timedifference[j] <- timedistmat[epidata$patient_study_id[1], epidata$patient_study_id[j]]
-      if(pureA2B == F) {
-        if (!is.na(epidata$sequence_id[1]) & !is.na(epidata$sequence_id[j])) {
-          epidata$snpdifference[j] <- snpdistmat[epidata$sequence_id[1], epidata$sequence_id[j]]
-          epidata$alignmentlength[j] <- alignmentlengthmat[epidata$sequence_id[1], epidata$sequence_id[j]]
-        }
-      } else if (pureA2B == T) {
-        if (!is.na(epidata$sequence_id[1]) & !is.na(epidata$sequence_id[j])) {
-          epidata$snpdifference_A[j] <- H[epidata$sequence_id[1], epidata$sequence_id[j],"A"]
-          epidata$snpdifference_B[j] <- H[epidata$sequence_id[1], epidata$sequence_id[j],"B"]
-        }
-      }
-    }
-    for (h in 1:number_of_hypotheses) {
-      hypliks[h] <- log(priors[h]) + likelihood_model(epidata = epidata, locationdata = locationdata, number_of_hypotheses = number_of_hypotheses, hypothesis = hypotheses[[h]], startdate = startdate, pureA2B = pureA2B)
-    }
-    posterior <- normalise(hypliks)
-    return(posterior)
-  } else {
-    posterior <- matrix(NA, nrow = nrow(epidata), ncol = number_of_hypotheses + 1)
-    row.names(posterior) <- epidata$patient_study_id
-    colnames(posterior) <- c(epidata$patient_study_id, "Hospital", "Community")
-    for (u in 1:nrow(epidata)) {
+  if(!is.list(priors)) {
+    if (all_comparisons == F) {
       hypliks <- rep(NA, number_of_hypotheses)
-      workingepidata <- rbind(epidata[u,], epidata[-u,])
-      names(hypliks) <- c(workingepidata$patient_study_id[2:length(workingepidata$patient_study_id)], "Hospital", "Community")
-      workingepidata$snpdifference <- NA
-      workingepidata$timedifference <- NA
-      for (j in 1:nrow(workingepidata)) {
-        workingepidata$timedifference[j] <- timedistmat[workingepidata$patient_study_id[1], workingepidata$patient_study_id[j]]
+      epidata$snpdifference <- NA
+      epidata$timedifference <- NA
+      for (j in 1:nrow(epidata)) {
+        epidata$timedifference[j] <- timedistmat[epidata$patient_study_id[1], epidata$patient_study_id[j]]
         if(pureA2B == F) {
-          if (!is.na(workingepidata$sequence_id[1]) & !is.na(workingepidata$sequence_id[j])) {
-            workingepidata$snpdifference[j] <- snpdistmat[workingepidata$sequence_id[1], workingepidata$sequence_id[j]]
-            workingepidata$alignmentlength[j] <- alignmentlengthmat[workingepidata$sequence_id[1], workingepidata$sequence_id[j]]
+          if (!is.na(epidata$sequence_id[1]) & !is.na(epidata$sequence_id[j])) {
+            epidata$snpdifference[j] <- snpdistmat[epidata$sequence_id[1], epidata$sequence_id[j]]
+            epidata$alignmentlength[j] <- alignmentlengthmat[epidata$sequence_id[1], epidata$sequence_id[j]]
           }
         } else if (pureA2B == T) {
-          if (!is.na(workingepidata$sequence_id[1]) & !is.na(workingepidata$sequence_id[j])) {
-            workingepidata$snpdifference_A[j] <- H[workingepidata$sequence_id[1], workingepidata$sequence_id[j],"A"]
-            workingepidata$snpdifference_B[j] <- H[workingepidata$sequence_id[1], workingepidata$sequence_id[j],"B"]
+          if (!is.na(epidata$sequence_id[1]) & !is.na(epidata$sequence_id[j])) {
+            epidata$snpdifference_A[j] <- H[epidata$sequence_id[1], epidata$sequence_id[j],"A"]
+            epidata$snpdifference_B[j] <- H[epidata$sequence_id[1], epidata$sequence_id[j],"B"]
           }
         }
       }
       for (h in 1:number_of_hypotheses) {
-        hypliks[h] <- log(priors[h]) + likelihood_model(epidata = workingepidata, locationdata = locationdata, number_of_hypotheses = number_of_hypotheses, hypothesis = hypotheses[[h]], startdate = startdate, pureA2B = pureA2B)
+        hypliks[h] <- log(priors[h]) + likelihood_model(epidata = epidata, locationdata = locationdata, number_of_hypotheses = number_of_hypotheses, hypothesis = hypotheses[[h]], startdate = startdate, pureA2B = pureA2B)
       }
-      hypliks <- normalise(hypliks)
-      for (s in 1:length(hypliks)) {
-        posterior[u, names(hypliks)[s]] <- hypliks[s]
+      posterior <- normalise(hypliks)
+      return(posterior)
+    } else {
+      posterior <- matrix(NA, nrow = nrow(epidata), ncol = number_of_hypotheses + 1)
+      row.names(posterior) <- epidata$patient_study_id
+      colnames(posterior) <- c(epidata$patient_study_id, "Hospital", "Community")
+      for (u in 1:nrow(epidata)) {
+        hypliks <- rep(NA, number_of_hypotheses)
+        workingepidata <- rbind(epidata[u,], epidata[-u,])
+        names(hypliks) <- c(workingepidata$patient_study_id[2:length(workingepidata$patient_study_id)], "Hospital", "Community")
+        workingepidata$snpdifference <- NA
+        workingepidata$timedifference <- NA
+        for (j in 1:nrow(workingepidata)) {
+          workingepidata$timedifference[j] <- timedistmat[workingepidata$patient_study_id[1], workingepidata$patient_study_id[j]]
+          if(pureA2B == F) {
+            if (!is.na(workingepidata$sequence_id[1]) & !is.na(workingepidata$sequence_id[j])) {
+              workingepidata$snpdifference[j] <- snpdistmat[workingepidata$sequence_id[1], workingepidata$sequence_id[j]]
+              workingepidata$alignmentlength[j] <- alignmentlengthmat[workingepidata$sequence_id[1], workingepidata$sequence_id[j]]
+            }
+          } else if (pureA2B == T) {
+            if (!is.na(workingepidata$sequence_id[1]) & !is.na(workingepidata$sequence_id[j])) {
+              workingepidata$snpdifference_A[j] <- H[workingepidata$sequence_id[1], workingepidata$sequence_id[j],"A"]
+              workingepidata$snpdifference_B[j] <- H[workingepidata$sequence_id[1], workingepidata$sequence_id[j],"B"]
+            }
+          }
+        }
+        for (h in 1:number_of_hypotheses) {
+          hypliks[h] <- log(priors[h]) + likelihood_model(epidata = workingepidata, locationdata = locationdata, number_of_hypotheses = number_of_hypotheses, hypothesis = hypotheses[[h]], startdate = startdate, pureA2B = pureA2B)
+        }
+        hypliks <- normalise(hypliks)
+        for (s in 1:length(hypliks)) {
+          posterior[u, names(hypliks)[s]] <- hypliks[s]
+        }
       }
+      return(posterior)
     }
-    return(posterior)
+  } else {
+    if (all_comparisons == F) {
+      posterior <- vector("list", length = length(priors))
+      hypliks <- matrix(NA, ncol = number_of_hypotheses, nrow = length(priors))
+      epidata$snpdifference <- NA
+      epidata$timedifference <- NA
+      for (j in 1:nrow(epidata)) {
+        epidata$timedifference[j] <- timedistmat[epidata$patient_study_id[1], epidata$patient_study_id[j]]
+        if(pureA2B == F) {
+          if (!is.na(epidata$sequence_id[1]) & !is.na(epidata$sequence_id[j])) {
+            epidata$snpdifference[j] <- snpdistmat[epidata$sequence_id[1], epidata$sequence_id[j]]
+            epidata$alignmentlength[j] <- alignmentlengthmat[epidata$sequence_id[1], epidata$sequence_id[j]]
+          }
+        } else if (pureA2B == T) {
+          if (!is.na(epidata$sequence_id[1]) & !is.na(epidata$sequence_id[j])) {
+            epidata$snpdifference_A[j] <- H[epidata$sequence_id[1], epidata$sequence_id[j],"A"]
+            epidata$snpdifference_B[j] <- H[epidata$sequence_id[1], epidata$sequence_id[j],"B"]
+          }
+        }
+      }
+      for (h in 1:number_of_hypotheses) {
+        stored_likelihood <- likelihood_model(epidata = epidata, locationdata = locationdata, number_of_hypotheses = number_of_hypotheses, hypothesis = hypotheses[[h]], startdate = startdate, pureA2B = pureA2B)
+        for (p in 1:length(priors)) {
+          hypliks[p,h] <- log(priors[[p]][h]) + stored_likelihood
+        }
+      }
+      for (p in 1:length(priors)) {
+        posterior[[p]] <- normalise(hypliks[p,])
+      }
+      return(posterior)
+    } else {
+      finalposterior <- vector("list", length = length(priors))
+      posterior <- array(NA, dim = c(nrow(epidata), number_of_hypotheses + 1, length(priors)))
+      row.names(posterior) <- epidata$patient_study_id
+      colnames(posterior) <- c(epidata$patient_study_id, "Hospital", "Community")
+      for (u in 1:nrow(epidata)) {
+        hypliks <- matrix(NA, ncol = number_of_hypotheses, nrow = length(priors))
+        workingepidata <- rbind(epidata[u,], epidata[-u,])
+        colnames(hypliks) <- c(workingepidata$patient_study_id[2:length(workingepidata$patient_study_id)], "Hospital", "Community")
+        workingepidata$snpdifference <- NA
+        workingepidata$timedifference <- NA
+        for (j in 1:nrow(workingepidata)) {
+          workingepidata$timedifference[j] <- timedistmat[workingepidata$patient_study_id[1], workingepidata$patient_study_id[j]]
+          if(pureA2B == F) {
+            if (!is.na(workingepidata$sequence_id[1]) & !is.na(workingepidata$sequence_id[j])) {
+              workingepidata$snpdifference[j] <- snpdistmat[workingepidata$sequence_id[1], workingepidata$sequence_id[j]]
+              workingepidata$alignmentlength[j] <- alignmentlengthmat[workingepidata$sequence_id[1], workingepidata$sequence_id[j]]
+            }
+          } else if (pureA2B == T) {
+            if (!is.na(workingepidata$sequence_id[1]) & !is.na(workingepidata$sequence_id[j])) {
+              workingepidata$snpdifference_A[j] <- H[workingepidata$sequence_id[1], workingepidata$sequence_id[j],"A"]
+              workingepidata$snpdifference_B[j] <- H[workingepidata$sequence_id[1], workingepidata$sequence_id[j],"B"]
+            }
+          }
+        }
+        for (h in 1:number_of_hypotheses) {
+          stored_likelihood <- likelihood_model(epidata = workingepidata, locationdata = locationdata, number_of_hypotheses = number_of_hypotheses, hypothesis = hypotheses[[h]], startdate = startdate, pureA2B = pureA2B)
+          for (p in 1:length(priors)) {
+            hypliks[p,h] <- log(priors[[p]][h]) + stored_likelihood
+          }
+        }
+        for (p in 1:length(p)) {
+          hypliks[p,] <- normalise(hypliks[p,])
+        }
+        for (s in 1:ncol(hypliks)) {
+          posterior[u, colnames(hypliks)[s],] <- hypliks[,s]
+        }
+      }
+      for (p in 1:length(p)) {
+        finalposterior[[p]] <- posterior[,,p]
+      }
+      return(finalposterior)
+    }
   }
 }
