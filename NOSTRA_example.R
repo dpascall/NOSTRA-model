@@ -4,7 +4,7 @@ library(lubridate)
 library(seqinr)
 library(pheatmap)
 
-##NOSTRA analysis
+##NOSTRA illustrative analysis
 
 ##function generate time difference matrix from sample collection dates
 timedifmat <- function(x) {
@@ -16,13 +16,13 @@ timedifmat <- function(x) {
 ##the code is included for completeness, but has no identifying data
 
 ##read in wards
-A <- read.csv("~/Downloads/Ward_data/cluster_A_genetic_temporal_data_NoPII_20200807.csv")
+#A <- read.csv("") ##data not available publicly
 
 ##read in sequences
-seqs <- read.fasta(file = "~/Downloads/Ward_data/AlignedWithConsensus.fasta")
+#seqs <- read.fasta(file = "") ##data not available publicly
 
 ##read in location information
-location <- read.csv("~/Downloads/Ward_data/ward_movement_network_edit_anonymised_20200811_NoPII.csv")
+#location <- read.csv("") ##data not available publicly
 
 ##reduce to required sequences
 neededseqs <- c(A$sequence_id)
@@ -121,15 +121,23 @@ for(i in 1:length(unique(locationslong$patient_study_id))) {
 ##run without X_H as no admission dates
 ##convert epi data for correct format for NOSTRA implementation
 A$detection <- as.numeric(difftime(as.Date(A$onset_date, format = "%d/%m/%Y"),
-                                   as.Date("01/01/2020", format = "%d/%m/%Y")), units = "days") + 1
+                                   as.Date("30/12/2019", format = "%d/%m/%Y")), units = "days") + 1
 A$admission <- rep(NA, nrow(A))
 A$sequencedate <- as.numeric(difftime(as.Date(A$sample_collection_date, format = "%d/%m/%Y"),
-                                      as.Date("01/01/2020", format = "%d/%m/%Y")), units = "days") + 1
+                                      as.Date("30/12/2019", format = "%d/%m/%Y")), units = "days") + 1
 A$sequence_id[A$sequence_id == "sequence_missing"] <- NA
 A$sequencedate[is.na(A$sequence_id)] <- NA
 
 ##fix incorrect date
 A$onset_date[8] <- "09/04/2020"
+
+for(i in 1:length(unique(A$patient_study_id))) {
+  print(i)
+  print(location$StartDate_0[location$patient_study_id %in% unique(A$patient_study_id)[i]][1])
+  A$admission[A$patient_study_id == unique(A$patient_study_id)[i]] <- 
+    as.numeric(difftime(as.Date(location$StartDate_0[location$patient_study_id %in% unique(A$patient_study_id)[i]][1], format = "%d/%m/%Y"),
+                        as.Date("30/12/2019", format = "%d/%m/%Y")), units = "days") + 1
+}
 
 ##reduce to minimal data - one sequence per person per bout, earliest taken
 indexes <- c()
@@ -154,16 +162,16 @@ colnames(Areducedtimedifference) <- row.names(Areducedtimedifference) <- Areduce
 
 ##generate NA SNPS for genetic data impact testing
 SNPsNA <- SNPs
-SNPsNA[SNPsNA >= 0] <- NA 
+SNPsNA[SNPsNA >= 0] <- NA
 
 ##run complete model
-Aposteriorall <- run_model(epidata = Areduced, locationdata = positions, snpdistmat = SNPs, timedistmat = Areducedtimedifference, alignmentlengthmat = alignmentlength, priors = rep(1/(nrow(Areduced)+1), nrow(Areduced)+1), all_comparisons = T, startdate = "2020-01-01")
+Aposteriorall <- run_model(epidata = Areduced, locationdata = positions, snpdistmat = SNPs, timedistmat = Areducedtimedifference, alignmentlengthmat = alignmentlength, priors = c(rep(1/(2*nrow(Areduced)), nrow(Areduced)), 0.5), all_comparisons = T, startdate = "2019-12-30")
 pheatmap(Aposteriorall, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(0, 1, by = 0.01)))
 
 ##run models missing different data components
-Aposteriornodates <- run_model(epidata = Areduced, locationdata = NA, snpdistmat = SNPs, timedistmat = Areducedtimedifference, alignmentlengthmat = alignmentlength, priors = rep(1/(nrow(Areduced)+1), nrow(Areduced)+1), all_comparisons = T, startdate = "2020-01-01")
-Aposteriornodatesnogenetics <- run_model(epidata = Areduced, locationdata = NA, snpdistmat = SNPsNA, alignmentlengthmat = alignmentlength, timedistmat = Areducedtimedifference, priors = rep(1/(nrow(Areduced)+1), nrow(Areduced)+1), all_comparisons = T, startdate = "2020-01-01")
-Aposteriornogenetics <- run_model(epidata = Areduced, locationdata = positions, snpdistmat = SNPsNA, alignmentlengthmat = alignmentlength, timedistmat = Areducedtimedifference, priors = rep(1/(nrow(Areduced)+1), nrow(Areduced)+1), all_comparisons = T, startdate = "2020-01-01")
+Aposteriornodates <- run_model(epidata = Areduced, locationdata = NA, snpdistmat = SNPs, timedistmat = Areducedtimedifference, alignmentlengthmat = alignmentlength, priors = c(rep(1/(2*nrow(Areduced)), nrow(Areduced)), 0.5), all_comparisons = T, startdate = "2019-12-30")
+Aposteriornodatesnogenetics <- run_model(epidata = Areduced, locationdata = NA, snpdistmat = SNPsNA, alignmentlengthmat = alignmentlength, timedistmat = Areducedtimedifference, priors = c(rep(1/(2*nrow(Areduced)), nrow(Areduced)), 0.5), all_comparisons = T, startdate = "2019-12-30")
+Aposteriornogenetics <- run_model(epidata = Areduced, locationdata = positions, snpdistmat = SNPsNA, alignmentlengthmat = alignmentlength, timedistmat = Areducedtimedifference, priors = c(rep(1/(2*nrow(Areduced)), nrow(Areduced)), 0.5), all_comparisons = T, startdate = "2019-12-30")
 
 ##calculate and add nosocomial component (1-C)
 fixedcolnames <- c(colnames(Aposteriorall), "Nosocomial")
@@ -176,30 +184,26 @@ Aposteriornogeneticsn <- cbind(Aposteriornogenetics, rowSums(Aposteriornogenetic
 colnames(Aposterioralln) <- colnames(Aposteriornodatesn) <- colnames(Aposteriornodatesnogeneticsn) <- colnames(Aposteriornogeneticsn) <- fixedcolnames
 
 ##save plots
-png("~/Documents/HOCI_prototype/Aall.png", width = 2000, height = round(2000*419/481), res = 350)
+png("Aall.png", width = 2000, height = round(2000*419/481), res = 350)
 pheatmap(Aposterioralln, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(0, 1, by = 0.01)))
 dev.off()
 
-png("~/Documents/HOCI_prototype/Aallfromgenetics.png", width = 2000, height = round(2000*419/481), res = 350)
+png("Aallfromgenetics.png", width = 2000, height = round(2000*419/481), res = 350)
 pheatmap(Aposterioralln-Aposteriornodatesn, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(-0.5, 0.5, by = 0.01)))
 dev.off()
 
-png("~/Documents/HOCI_prototype/Aallfromdates.png", width = 2000, height = round(2000*419/481), res = 350)
+png("Aallfromdates.png", width = 2000, height = round(2000*419/481), res = 350)
 pheatmap(Aposterioralln-Aposteriornogeneticsn, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(-0.5, 0.5, by = 0.01)))
 dev.off()
 
-png("~/Documents/HOCI_prototype/Aallnochange.png", width = 2000, height = round(2000*419/481), res = 350)
-pheatmap(Aposterioralln, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(0, 1, by = 0.01)))
-dev.off()
-
-png("~/Documents/HOCI_prototype/Anodates.png", width = 2000, height = round(2000*419/481), res = 350)
+png("Anodates.png", width = 2000, height = round(2000*419/481), res = 350)
 pheatmap(Aposteriornodatesn-Aposteriornodatesnogeneticsn, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(-0.5, 0.5, by = 0.01)))
 dev.off()
 
-png("~/Documents/HOCI_prototype/Anogenetics.png", width = 2000, height = round(2000*419/481), res = 350)
+png("Anogenetics.png", width = 2000, height = round(2000*419/481), res = 350)
 pheatmap(Aposteriornogeneticsn-Aposteriornodatesnogeneticsn, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(-0.5, 0.5, by = 0.01)))
 dev.off()
 
-png("~/Documents/HOCI_prototype/Anodatesnogenetics.png", width = 2000, height = round(2000*419/481), res = 350)
-pheatmap(Aposteriornodatesnogeneticsn, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(0, 1, by = 0.01)))
+png("Anodatesnogenetics.png", width = 2000, height = round(2000*419/481), res = 350)
+pheatmap(Aposteriornodatesnogeneticsn, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(-0.5, 0.5, by = 0.01)))
 dev.off()
