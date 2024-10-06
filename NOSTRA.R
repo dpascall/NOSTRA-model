@@ -102,13 +102,20 @@ likelihood_model <- function(epidata, locationdata, priors, number_of_hypotheses
   l_prime <- rep(-Inf, length(function_vector))
   if (is.numeric(hypothesis)) {
     function_vector[hypothesis] <- 2
-    if (epidata$patient_study_id[1] %in% colnames(locationdata)) {
+    if (epidata$patient_study_id[1] %in% colnames(locationdata) & epidata$patient_study_id[hypothesis + 1] %in% colnames(locationdata)) {
       if (length(generate_location(targetA = epidata$patient_study_id[hypothesis + 1], targetB = epidata$patient_study_id[1],
                         startdate = startdate, enddate = epidata$onset_date[1], locationmatrix = locationdata)) == 0) {
         return(sum(l_prime))
       }
     }
   } else {
+    if (hypothesis == "H") {
+      if (!is.na(epidata$admission[1])) {
+        if ((epidata$detection[1] - epidata$admission[1]) == 0) {
+          return(sum(l_prime))
+        }
+      }
+    }
     function_vector <- c(function_vector, 3)
   }
   for (q in 1:length(function_vector)) {
@@ -238,7 +245,21 @@ run_model <- function(epidata, locationdata, snpdistmat, timedistmat, priors, st
   hypotheses <- as.list(1:number_of_hypotheses)
   hypotheses[[number_of_hypotheses]] <- "C"
   hypotheses[[number_of_hypotheses-1]] <- "H"
-  if(!is.list(priors)) {
+  ##run simple NOSTRA if no candidates...
+  if (length(hypotheses) == 2) {
+    if (is.na(epidata$admission[1])) {
+      warning("Not enough data for posterior inference, priors returned")
+      return(priors)
+    }
+    hypliks <- rep(NA, 2)
+    hypliks[1] <- x_h_likelihood(hypothesis = "H", admission = epidata$admission[1], detection = epidata$detection[1]) + log(priors[1])
+    hypliks[2] <- x_h_likelihood(hypothesis = "C", admission = epidata$admission[1], detection = epidata$detection[1]) + log(priors[2])
+    posterior <- normalise(hypliks)
+    names(posterior) <- c("H", "C")
+    return(posterior)
+  }
+  ##...otherwise run full NOSTRA
+  if (!is.list(priors)) {
     if (all_comparisons == F) {
       hypliks <- rep(NA, number_of_hypotheses)
       epidata$snpdifference <- NA
