@@ -3,7 +3,7 @@ library(lubridate)
 library(plyr)
 library(igraph)
 library(combinat)
-set.seed(789) ##had to be run in several goes due to cashe failure - seed won't regenerate dataset
+set.seed(789)
 
 infectedby <- function (ident, df) {
   infections <- unique(df$ID[df$infectionsource %in% ident])
@@ -20,7 +20,7 @@ mu <- 6.677*10^(-4)/365 * 29811
 Neff <- floor(0.5*(exp(2.5)+exp(4.5)))
 generationtime <- 5.5
 
-runs <- c(1:3)
+runs <- c(1:1)
 prev <- c("High", "Low", "Med")
 rep <- c(1:20)
 
@@ -301,11 +301,33 @@ for (x in seq_len(nrow(conditions))) {
   
   treeSNPs <- matrix(rep(NA, length(unique(detectedcases$treeID))^2), nrow = length(unique(detectedcases$treeID)), ncol = length(unique(detectedcases$treeID)))
   colnames(treeSNPs) <- rownames(treeSNPs) <- sort(unique(detectedcases$treeID))
+  
+  print("Generating location data")
+  ##generate location data
+  start <- min(c(patientdata$Date, hcwdata$Date))
+  end <- max(c(detectedcases$admission, detectedcases$discharge, detectedcases$detectiondate))
+  locations <- matrix(NA, nrow = length(start:end), ncol = nrow(detectedcases))
+  colnames(locations) <- detectedcases$ID
+  rownames(locations) <- as.character(as.Date(start:end))
+  
+  for (g in seq_len(nrow(detectedcases))) {
+    locations[which(rownames(locations) == as.character(as.Date(detectedcases$admission[g]))):(which(rownames(locations) == as.character(as.Date(detectedcases$admission[g])))+length(detectedcases$admission[g]:detectedcases$discharge[g])-1),g] <- rep(detectedcases$ward[g], length(detectedcases$admission[g]:detectedcases$discharge[g]))
+  }
+  
+  locations <- as.data.frame(locations)
+  locations <- cbind(Date = rownames(locations), locations)
+  rownames(locations) <- seq_len(nrow(locations))
+  
+  ##remove to reduce memory usage
+  rm(hcwdata, reducedhcwdata)
 
   print("Calculating numbers of SNPs between transmission trees")
   ##tree specific SNP calculation - to minimise compute, calculate differences only between trees on the same ward
   for (q in seq_along(unique(detectedcases$ward))) {
     combinations <- combn(sort(unique(detectedcases[detectedcases$ward %in% unique(detectedcases$ward)[q],]$treeID)), 2)
+    if (is.null(ncol(combinations))) {
+      combinations <- as.matrix(combinations, nrow = 2, ncol = 1)
+    }
     for (i in seq_len(ncol(combinations))) {
       if (is.na(treeSNPs[rownames(treeSNPs) %in% unique(as.character(detectedcases$treeID[as.character(detectedcases$treeID) %in% as.character(combinations[1,i])])), 
                          colnames(treeSNPs) %in% unique(as.character(detectedcases$treeID[as.character(detectedcases$treeID) %in% as.character(combinations[2,i])]))])) {
@@ -325,14 +347,42 @@ for (x in seq_len(nrow(conditions))) {
   ##get snps from on transmission trees - calculate SNPs between isolates within trees, and SNPs to root of tree for all isolates in different trees
   for (i in seq_along(transtrees)) {
     if (!is.null(transtrees[[i]])) {
-      detectionverts <- as.numeric(V(transtrees[[i]])[V(transtrees[[i]])$Event %in% "Detection"])
-      detectioncombinations <- as.matrix(combn(unique(detectionverts), 2))
-      for (l in seq_len(ncol(detectioncombinations))) {
-        SNPs[rownames(SNPs) %in% as.character(V(transtrees[[i]])$To[detectioncombinations[1,l]]), colnames(SNPs) %in% as.character(V(transtrees[[i]])$To[detectioncombinations[2,l]])] <-
-        sum(E(transtrees[[i]])$weight[shortest_paths(transtrees[[i]], detectioncombinations[1,l], detectioncombinations[2,], mode = "all", output = "both")$epath[[1]]])
-      }
-      for (l in seq_along(detectionverts)) {
-        SNPs[rownames(SNPs) %in% as.character(detectionverts[l]), !colnames(SNPs) %in% as.character(unique(V(transtrees[[i]])$To[V(transtrees[[i]])$Event %in% "Detection"]))] <- sum(E(transtrees[[i]])$weight[shortest_paths(transtrees[[i]], detectionverts[l], which.min(as.Date(V(transtrees[[i]])$Date)), mode = "all", output = "both")$epath[[1]]])
+      ##break up large transmission trees by ward to minimise compute and memory usage
+      ##possible as only cases on the same ward are compared genetically
+      ##does not work for any future analyses where this is not the case!!
+      IDsintree <- unique(c(V(transtrees[[i]])$From, V(transtrees[[i]])$To))
+      wardsintree <- unique(dataset$ward[dataset$ID %in% IDsintree])
+      wardtrees <- vector("list", length = length(wardsintree))
+      for (j in seq_len(length(wardsintree))) {
+        if (sum(IDsintree %in% unique(dataset$ID[dataset$ward %in% wardsintree[j]])) < 2) {
+          next()
+        }
+        ##subset tree to tree within ward
+        wardverts <- as.numeric(V(transtrees[[i]])[V(transtrees[[i]])$To %in% unique(dataset$ID[dataset$ward %in% wardsintree[j]])|V(transtrees[[i]])$To %in% unique(dataset$ID[dataset$ward %in% wardsintree[j]])])
+        target <- wardverts
+        for (l in 1:(length(wardverts)-1)) {
+          for (p in (l+1):length(wardverts)) {
+            target <- c(target, as.numeric(shortest_paths(transtrees[[i]], wardverts[l], wardverts[p], mode = "all")$vpath[[1]]))
+          }
+        }
+        target <- unique(target)
+        wardtrees[[j]] <- induced_subgraph(transtrees[[i]], target)
+        ##calculate difference between ward subtrees
+        detectionverts <- as.numeric(V(wardtrees[[j]])[V(wardtrees[[j]])$Event %in% "Detection" & (V(wardtrees[[j]])$To %in% unique(dataset$ID[dataset$ward %in% wardsintree[j]])|V(wardtrees[[j]])$To %in% unique(dataset$ID[dataset$ward %in% wardsintree[j]]))])
+        if (length(detectionverts) < 2) {
+          next()
+        }
+        detectioncombinations <- as.matrix(combn(unique(detectionverts), 2))
+        if (is.null(ncol(detectioncombinations))) {
+          detectioncombinations <- as.matrix(detectioncombinations, nrow = 2, ncol = 1)
+        }
+        for (l in seq_len(ncol(detectioncombinations))) {
+          SNPs[rownames(SNPs) %in% as.character(V(wardtrees[[j]])$To[detectioncombinations[1,l]]), colnames(SNPs) %in% as.character(V(wardtrees[[j]])$To[detectioncombinations[2,l]])] <-
+            sum(E(wardtrees[[j]])$weight[shortest_paths(wardtrees[[j]], detectioncombinations[1,l], detectioncombinations[2,], mode = "all", output = "both")$epath[[1]]])
+        }
+        for (l in seq_along(detectionverts)) {
+          SNPs[rownames(SNPs) %in% as.character(detectionverts[l]), !colnames(SNPs) %in% as.character(unique(V(wardtrees[[j]])$To[V(wardtrees[[j]])$Event %in% "Detection"]))] <- sum(E(wardtrees[[j]])$weight[shortest_paths(wardtrees[[j]], detectionverts[l], which.min(as.Date(V(wardtrees[[j]])$Date)), mode = "all", output = "both")$epath[[1]]])
+        }
       }
     }
   }
@@ -343,6 +393,9 @@ for (x in seq_len(nrow(conditions))) {
   ##to minimise compute, sum between transmission tree and within transmission tree SNPs per ward 
   for (q in seq_along(unique(detectedcases$ward))) {
     combinations <- combn(unique(detectedcases[detectedcases$ward %in% unique(detectedcases$ward)[q],]$ID), 2)
+    if (is.null(ncol(combinations))) {
+      combinations <- as.matrix(combinations, nrow = 2, ncol = 1)
+    }
     for (i in seq_len(ncol(combinations))) {
         SNPs[rownames(SNPs) %in% as.character(combinations[1,i]), colnames(SNPs) %in% as.character(combinations[2,i])] <-
         SNPs[rownames(SNPs) %in% as.character(combinations[1,i]), colnames(SNPs) %in% as.character(combinations[2,i])] +
@@ -352,22 +405,6 @@ for (x in seq_len(nrow(conditions))) {
   }
 
   SNPs[lower.tri(SNPs)] <- t(SNPs)[lower.tri(SNPs)]
-
-  print("Generating location data")
-  ##generate location data
-  start <- min(c(patientdata$Date, hcwdata$Date))
-  end <- max(c(detectedcases$admission, detectedcases$discharge, detectedcases$detectiondate))
-  locations <- matrix(NA, nrow = length(start:end), ncol = nrow(detectedcases))
-  colnames(locations) <- detectedcases$ID
-  rownames(locations) <- as.character(as.Date(start:end))
-
-  for (g in seq_len(nrow(detectedcases))) {
-    locations[which(rownames(locations) == as.character(as.Date(detectedcases$admission[g]))):(which(rownames(locations) == as.character(as.Date(detectedcases$admission[g])))+length(detectedcases$admission[g]:detectedcases$discharge[g])-1),g] <- rep(detectedcases$ward[g], length(detectedcases$admission[g]:detectedcases$discharge[g]))
-  }
-
-  locations <- as.data.frame(locations)
-  locations <- cbind(Date = rownames(locations), locations)
-  rownames(locations) <- seq_len(nrow(locations))
 
   print("Saving data for dataset")
   finaldataformodel[[x]] <- list(detectedcases, SNPs, conditions[x,], locations, start)
