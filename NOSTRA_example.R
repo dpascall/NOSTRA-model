@@ -16,13 +16,13 @@ timedifmat <- function(x) {
 ##the code is included for completeness, but has no identifying data
 
 ##read in wards
-#A <- read.csv("") ##data not available publicly
+#A <- read.csv("")
 
 ##read in sequences
-#seqs <- read.fasta(file = "") ##data not available publicly
+#seqs <- read.fasta(file = "")
 
 ##read in location information
-#location <- read.csv("") ##data not available publicly
+#location <- read.csv("")
 
 ##reduce to required sequences
 neededseqs <- c(A$sequence_id)
@@ -183,17 +183,23 @@ Aposteriornogeneticsn <- cbind(Aposteriornogenetics, rowSums(Aposteriornogenetic
 ##set correct colnames
 colnames(Aposterioralln) <- colnames(Aposteriornodatesn) <- colnames(Aposteriornodatesnogeneticsn) <- colnames(Aposteriornogeneticsn) <- fixedcolnames
 
+##remove patients with missing location data
+Aposteriorallnreduced <- Aposterioralln[!rownames(Aposterioralln) %in% c("CAMP004621", "CAMP004628"),]
+Aposteriornodatesn <- Aposteriornodatesn[!rownames(Aposteriornodatesn) %in% c("CAMP004621", "CAMP004628"),]
+Aposteriornodatesnogeneticsn <- Aposteriornodatesnogeneticsn[!rownames(Aposteriornodatesnogeneticsn) %in% c("CAMP004621", "CAMP004628"),]
+Aposteriornogeneticsn <- Aposteriornogeneticsn[!rownames(Aposteriornogeneticsn) %in% c("CAMP004621", "CAMP004628"),]
+
 ##save plots
 png("Aall.png", width = 2000, height = round(2000*419/481), res = 350)
 pheatmap(Aposterioralln, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(0, 1, by = 0.01)))
 dev.off()
 
 png("Aallfromgenetics.png", width = 2000, height = round(2000*419/481), res = 350)
-pheatmap(Aposterioralln-Aposteriornodatesn, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(-0.5, 0.5, by = 0.01)))
+pheatmap(Aposteriorallnreduced-Aposteriornodatesn, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(-0.5, 0.5, by = 0.01)))
 dev.off()
 
 png("Aallfromdates.png", width = 2000, height = round(2000*419/481), res = 350)
-pheatmap(Aposterioralln-Aposteriornogeneticsn, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(-0.5, 0.5, by = 0.01)))
+pheatmap(Aposteriorallnreduced-Aposteriornogeneticsn, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(-0.5, 0.5, by = 0.01)))
 dev.off()
 
 png("Anodates.png", width = 2000, height = round(2000*419/481), res = 350)
@@ -205,5 +211,5 @@ pheatmap(Aposteriornogeneticsn-Aposteriornodatesnogeneticsn, cluster_rows = FALS
 dev.off()
 
 png("Anodatesnogenetics.png", width = 2000, height = round(2000*419/481), res = 350)
-pheatmap(Aposteriornodatesnogeneticsn, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(-0.5, 0.5, by = 0.01)))
+pheatmap(Aposteriornodatesnogeneticsn, cluster_rows = FALSE, cluster_cols = FALSE, breaks = c(seq(0, 1, by = 0.01)))
 dev.off()
