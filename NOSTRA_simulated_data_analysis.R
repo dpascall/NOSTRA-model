@@ -1,6 +1,6 @@
 rm(list = ls())
-source("~/Documents/NOSTRA-model/NOSTRA.R")
-load("~/Documents/NOSTRA-model/finaldataformodel.Rdata")
+source("NOSTRA.R")
+load("finaldataformodel.Rdata")
 requireNamespace("mlr3measures")
 
 ##function generate time difference matrix from sample collection dates
@@ -64,7 +64,7 @@ for (i in seq_len(length(finaldataformodel))) {
   results[[i]] <- wardresults
 }
 
-#save(results, file = "~/Documents/NOSTRA-model/results.Rdata")
+#save(results, file = "results.Rdata")
 
 ##summarise simulation results - total
 
