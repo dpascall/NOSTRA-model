@@ -1,2 +1,4 @@
 # NOSTRA-model
-Repository for the NOSTRA model code
+Repository for the NOSTRA model code. In order to repeat the simulation analyses from "The NOSTRA model: coherent estimation of infection sources in the case of possible nosocomial transmission", please clone into this repository, download the zipped simulation output from doi.org/10.6084/m9.figshare.27172758 and extract the file simulation_data.zip into the downloaded repository. Load R, set the working directory to the NOSTRA-model directory and run the R script NOSTRA_simulated_data_handling.R to perform the genetic simulations and convert the raw simulation output into a form useable by the model. The file "finaldataformodel.Rdata" should be output on completion. Finally run the R script NOSTRA_simulated_data_analysis.R to run NOSTRA on the output of NOSTRA_simulated_data_handling.R and generate summary statistics and plots.
+
+If any issues are encountered in the re-running of the simulation study from this code, please, in the first instance, make sure the packages that you have installed match the versions in sessionInfo.txt, and if they do, raise an issue on the respository.
