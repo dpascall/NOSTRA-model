@@ -28,15 +28,14 @@ rep <- c(1:20)
 conditions <- expand.grid(prev, rep, runs)
 colnames(conditions) <- c("prev", "rep", "runs")
 
-#load("~/Documents/NOSTRA-model/finaldataformodel.Rdata")
 finaldataformodel <- vector("list", length = nrow(conditions))
 
 for (x in seq_len(nrow(conditions))) {
   print(paste0("Dataset ", x, " of ", length(finaldataformodel)))
 
   print("Loading data")
-  patientdata <- read.csv(paste("~/Documents/NOSTRA-model/simulated_data/run", conditions$runs[x], "/pat_data_full_stay_", conditions$prev[x], conditions$rep[x], ".csv", sep = ""))
-  hcwdata <- read.csv(paste("~/Documents/NOSTRA-model/simulated_data/run", conditions$runs[x], "/hcw_data_full_timecourse_", conditions$prev[x], conditions$rep[x], ".csv", sep = ""))
+  patientdata <- read.csv(paste("simulated_data/run", conditions$runs[x], "/pat_data_full_stay_", conditions$prev[x], conditions$rep[x], ".csv", sep = ""))
+  hcwdata <- read.csv(paste("simulated_data/run", conditions$runs[x], "/hcw_data_full_timecourse_", conditions$prev[x], conditions$rep[x], ".csv", sep = ""))
   
   patientdata$Date <- as.Date(patientdata$Date)
   hcwdata$Date <- as.Date(hcwdata$Date)
@@ -408,5 +407,5 @@ for (x in seq_len(nrow(conditions))) {
 
   print("Saving data for dataset")
   finaldataformodel[[x]] <- list(detectedcases, SNPs, conditions[x,], locations, start)
-  save(finaldataformodel, file = "~/Documents/NOSTRA-model/finaldataformodel.Rdata")
 }
+save(finaldataformodel, file = "finaldataformodel.Rdata")
