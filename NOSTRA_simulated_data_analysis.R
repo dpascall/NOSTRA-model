@@ -12,6 +12,9 @@ timedifmat <- function(x) {
 ##run analyses
 results <- vector("list", length = length(finaldataformodel))
 for (i in seq_len(length(finaldataformodel))) {
+  if (is.null(finaldataformodel[[i]])) {
+    next()
+  }
   print(paste0("Dataset ", i, " of ", length(finaldataformodel)))
   ##made data format appropriate
   finaldataformodel[[i]][[1]]$detection <- as.numeric(difftime(as.Date(finaldataformodel[[i]][[1]]$detectiondate, format = "%Y-%m-%d"),
@@ -46,7 +49,13 @@ for (i in seq_len(length(finaldataformodel))) {
       patientresults[[k]] <- list(run_model(epidata = modifiedepidata, locationdata = locations, snpdistmat = SNPs,
                                             timedistmat = timedifferences, alignmentlengthmat = alignmentlength,
                                             priors = c(rep(0.5*(1/nrow(epidata)), nrow(epidata)), 0.5), 
-                                            all_comparisons = F, startdate = finaldataformodel[[i]][[5]]), modifiedepidata$infectionsource[1])
+                                            all_comparisons = F, startdate = finaldataformodel[[i]][[5]]), 
+                                  modifiedepidata$infectionsource[1],
+                                  NULL,
+                                  run_model(epidata = modifiedepidata[1,], locationdata = locations, snpdistmat = SNPs,
+                                            timedistmat = timedifferences, alignmentlengthmat = alignmentlength,
+                                            priors = c(0.5, 0.5), 
+                                            all_comparisons = F, startdate = finaldataformodel[[i]][[5]]))
       names(patientresults[[k]][[1]]) <- c(as.character(modifiedepidata$ID[2:length(modifiedepidata$ID)]), "H", "C")
     }
     wardresults[[j]] <- list(patientresults, c(rep(0.5*(1/nrow(epidata)), nrow(epidata)), 0.5),
@@ -58,34 +67,39 @@ for (i in seq_len(length(finaldataformodel))) {
 #save(results, file = "~/Documents/NOSTRA-model/results.Rdata")
 
 ##summarise simulation results - total
-load("~/Documents/NOSTRA-model/results.Rdata")
 
-simulationresults <- as.data.frame(matrix(NA, nrow = length(finaldataformodel), ncol = 13))
+simulationresults <- as.data.frame(matrix(NA, nrow = length(finaldataformodel), ncol = 14))
 colnames(simulationresults) <- c("Prevalence", "ParamSet", "Repeat", "NosocomialityScore",
                                  "GeneralScore", "PrevPriorNosocomialityScore", "PrevPriorGeneralScore",
                                  "DefaultPriorNosocomialityScore", "DefaultPriorGeneralScore", "RuleofThumbScore",
-                                 "NOSTRATreeScore", "PrevTreeScore", "DefaultTreeScore")
+                                 "NOSTRATreeScore", "PrevTreeScore", "DefaultTreeScore", "NosocomialNoCandidates")
 
 ##iterate over datasets
 for (i in seq_len(length(results))) {
+  if (is.null(results[[i]])) {
+    next()
+  }
+  
   simulationresults$Prevalence[i] <- finaldataformodel[[i]][[3]][1]
   simulationresults$ParamSet[i] <- finaldataformodel[[i]][[3]][2]
   simulationresults$Repeat[i] <- finaldataformodel[[i]][[3]][3]
   ##iterate over wards
   
-  briers <- matrix(NA, nrow = length(results[[i]]), ncol = 10)
+  briers <- matrix(NA, nrow = length(results[[i]]), ncol = 11)
   for (j in seq_len(length(results[[i]]))) {
     ##iterate over patients in wards
-    patientbriers <- matrix(NA, nrow = length(results[[i]][[j]][[1]]), ncol = 10)
+    patientbriers <- matrix(NA, nrow = length(results[[i]][[j]][[1]]), ncol = 11)
     for (l in seq_len(length(results[[i]][[j]][[1]]))) {
       ##if infected by someone outside their ward set source to H
       ##as they would not be in set of identified patients
-      if (!results[[i]][[j]][[1]][[l]][[2]][1] %in% results[[i]][[j]][[4]]$ID & results[[i]][[j]][[1]][[l]][[2]][1] != "C") {
+      if (!results[[i]][[j]][[1]][[l]][[2]][1] %in% results[[i]][[j]][[4]]$ID && results[[i]][[j]][[1]][[l]][[2]][1] != "C") {
         results[[i]][[j]][[1]][[l]][[2]][1] <- "H"
       }
       ##get transmission trees
       results[[i]][[j]][[1]][[l]][[3]] <- results[[i]][[j]][[4]]$treeID[results[[i]][[j]][[4]]$ID %in% results[[i]][[j]][[4]]$ID[!results[[i]][[j]][[4]]$ID %in% names(results[[i]][[j]][[1]][[l]][[1]])]]
-      if (sum(results[[i]][[j]][[4]]$treeID %in% results[[i]][[j]][[1]][[l]][[3]]) == 1) {
+      if (results[[i]][[j]][[1]][[l]][[2]][1] == "C") {
+        results[[i]][[j]][[1]][[l]][[3]] <- "C"
+      } else if (sum(results[[i]][[j]][[4]]$treeID %in% results[[i]][[j]][[1]][[l]][[3]]) == 1 && results[[i]][[j]][[1]][[l]][[3]] != "C") {
         results[[i]][[j]][[1]][[l]][[3]] <- "H"
       }
       ##adjust priors for transmission trees and correct posterior
@@ -166,41 +180,39 @@ for (i in seq_len(length(results))) {
                                                  t(as.matrix(treeprevprior)))
       patientbriers[l,10] <- mlr3measures::mbrier(factor(results[[i]][[j]][[1]][[l]][[3]], levels = names(treedefaultprior)),
                                                   t(as.matrix(treedefaultprior)))
+      patientbriers[l,11] <- mlr3measures::mbrier(factor(ifelse(results[[i]][[j]][[1]][[l]][[2]] == "C", "C", "H"), levels = c("H","C")),
+                                                  t(as.matrix(results[[i]][[j]][[1]][[l]][[4]])))
     }
     briers[j,] <- colMeans(patientbriers)
   }
-  simulationresults[i,4:13] <- colMeans(briers)
+  simulationresults[i,4:14] <- colMeans(briers)
 }
 
 ##generate figures
 library(ggplot2)
 library(tidyverse)
 
-simulationresults$Prevalence <- unlist(simulationresults$Prevalence)
+simulationresults$Prevalence <- as.character(unlist(simulationresults$Prevalence))
 simulationresults$ParamSet <- unlist(simulationresults$ParamSet)
 simulationresults$Repeat <- unlist(simulationresults$Repeat)
 
-simulationresults$Prevalence[simulationresults$Prevalence == 1] <- "High"
-simulationresults$Prevalence[simulationresults$Prevalence == 2] <- "Low"
-simulationresults$Prevalence[simulationresults$Prevalence == 3] <- "Intermediate"
-
-
-simulationresults <- simulationresults[complete.cases(simulationresults),]
+simulationresults$Prevalence[simulationresults$Prevalence == "Med"] <- "Intermediate"
 
 figuredata <- pivot_longer(simulationresults, cols = c("NosocomialityScore",
                                                        "GeneralScore", "PrevPriorNosocomialityScore", "PrevPriorGeneralScore",
                                                        "DefaultPriorNosocomialityScore", "DefaultPriorGeneralScore", "RuleofThumbScore",
-                                                       "NOSTRATreeScore", "PrevTreeScore", "DefaultTreeScore"))
+                                                       "NOSTRATreeScore", "PrevTreeScore", "DefaultTreeScore", "NosocomialNoCandidates"))
 
 figuredata$Type <- rep(NA, nrow(figuredata))
-figuredata$Type[figuredata$name %in% c("NosocomialityScore", "PrevPriorNosocomialityScore", "DefaultPriorNosocomialityScore", "RuleofThumbScore")] <- "Nosocomiality Detection"
+figuredata$Type[figuredata$name %in% c("NosocomialityScore", "PrevPriorNosocomialityScore", "DefaultPriorNosocomialityScore", "RuleofThumbScore", "NosocomialNoCandidates")] <- "Nosocomiality Detection"
 figuredata$Type[figuredata$name %in% c("GeneralScore", "PrevPriorGeneralScore", "DefaultPriorGeneralScore")] <- "Source Detection"
 figuredata$Type[figuredata$name %in% c("NOSTRATreeScore", "PrevTreeScore", "DefaultTreeScore")] <- "Transmission Tree Detection"
 
 ##tidy up names for figure
-figuredata$name[figuredata$name %in% c("NOSTRATreeScore")] <- "NOSTRA"
-figuredata$name[figuredata$name %in% c("NosocomialityScore")] <- "NOSTRA"
-figuredata$name[figuredata$name %in% c("GeneralScore")] <- "NOSTRA"
+figuredata$name[figuredata$name %in% c("NOSTRATreeScore")] <- "NOSTRA - Candidates"
+figuredata$name[figuredata$name %in% c("NosocomialityScore")] <- "NOSTRA - Candidates"
+figuredata$name[figuredata$name %in% c("GeneralScore")] <- "NOSTRA - Candidates"
+figuredata$name[figuredata$name %in% c("NosocomialNoCandidates")] <- "NOSTRA - No Candidates"
 figuredata$name[figuredata$name %in% c("PrevPriorNosocomialityScore")] <- "Prevalence Prior"
 figuredata$name[figuredata$name %in% c("PrevTreeScore")] <- "Prevalence Prior"
 figuredata$name[figuredata$name %in% c("PrevPriorGeneralScore")] <- "Prevalence Prior"
@@ -209,9 +221,27 @@ figuredata$name[figuredata$name %in% c("DefaultPriorGeneralScore")] <- "Naïve P
 figuredata$name[figuredata$name %in% c("DefaultTreeScore")] <- "Naïve Prior"
 figuredata$name[figuredata$name %in% c("RuleofThumbScore")] <- "96hr Categorisation"
 
-figuredata$name <- factor(figuredata$name, levels = c("NOSTRA", "Prevalence Prior", "Naïve Prior", "96hr Categorisation"))
+figuredata$name <- factor(figuredata$name, levels = c("NOSTRA - Candidates", "NOSTRA - No Candidates",
+                                                      "Prevalence Prior", "Naïve Prior", "96hr Categorisation"))
 
 figuredata_means <- figuredata %>% group_by(name, Type) %>% summarise(value=mean(value))
+
+library(rstatix)
+library(ggpubr)
+
+figuredata %>%
+  group_by(Type) %>%
+  wilcox_test(data =., value ~ name, paired = T, ref.group = "NOSTRA - Candidates", alternative = "less") %>%
+  adjust_pvalue(method = "bonferroni") %>%
+  add_significance("p.adj") %>% 
+  add_xy_position(x = "name") -> wilcoxon
+
+##fix x positions
+wilcoxon$xmax <- c(2, 3, 4, 5, 2, 3, 2, 3)
+
+wilcoxon$p.format <- p_format(
+  wilcoxon$p.adj, accuracy = 0.001,
+  leading.zero = TRUE)
 
 plot <- ggplot(figuredata, aes(name, value)) + 
   facet_grid(. ~ Type, scales = "free_x") +
@@ -219,13 +249,13 @@ plot <- ggplot(figuredata, aes(name, value)) +
   xlab("") +
   theme_bw() +
   geom_jitter(aes(colour = Prevalence), height = 0, width = 0.1) +
-  geom_point(data = figuredata_means, size = 4) +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+  geom_point(data = figuredata_means, size = 4) + 
+  stat_pvalue_manual(wilcoxon, label = "p.format") +
+  theme(axis.text.x = element_text(angle = 70, vjust = 1, hjust=1))
 
-#save(results, file = "~/Documents/NOSTRA-model/results.Rdata")
+ggsave(plot = plot, filename = "NOSTRAFig3.png", dpi = 350)
 
-##summarise simulation results - per day
-#load("~/Documents/NOSTRA-model/results.Rdata")
+##per day analysis
 
 simulationresults_perday_list <- vector("list", length = 11)
 ##iterate over days
@@ -237,7 +267,11 @@ for (q in 1:11) {
                                           "NOSTRATreeScore", "PrevTreeScore", "DefaultTreeScore")
   
   ##iterate over datasets
-  for (i in 1:31) {#seq_len(length(results))) {
+  for (i in seq_len(length(results))) {
+    if (is.null(results[[i]])) {
+      next()
+    }
+    
     simulationresults_perday[i,1] <- as.numeric(finaldataformodel[[i]][[3]][1])
     simulationresults_perday[i,2] <- as.numeric(finaldataformodel[[i]][[3]][2])
     simulationresults_perday[i,3] <- as.numeric(finaldataformodel[[i]][[3]][3])
@@ -360,7 +394,7 @@ colnames(final_simulationresults_perday) <- c("Prevalence", "ParamSet", "Repeat"
                                               "DefaultPriorNosocomialityScore", "DefaultPriorGeneralScore", "RuleofThumbScore",
                                               "NOSTRATreeScore", "PrevTreeScore", "DefaultTreeScore")
 
-final_simulationresults_perday$Day <- rep(0:10, each = 180)
+final_simulationresults_perday$Day <- rep(0:10, each = 60)
 
 ##generate figures
 library(ggplot2)
@@ -369,8 +403,6 @@ library(tidyverse)
 final_simulationresults_perday$Prevalence[final_simulationresults_perday$Prevalence == 1] <- "High"
 final_simulationresults_perday$Prevalence[final_simulationresults_perday$Prevalence == 2] <- "Low"
 final_simulationresults_perday$Prevalence[final_simulationresults_perday$Prevalence == 3] <- "Intermediate"
-
-final_simulationresults_perday <- final_simulationresults_perday[complete.cases(final_simulationresults_perday),]
 
 figuredata <- pivot_longer(final_simulationresults_perday, cols = c("NosocomialityScore",
                                                                     "GeneralScore", "PrevPriorNosocomialityScore", "PrevPriorGeneralScore",
@@ -381,6 +413,7 @@ figuredata$Type <- rep(NA, nrow(figuredata))
 figuredata$Type[figuredata$name %in% c("NosocomialityScore", "PrevPriorNosocomialityScore", "DefaultPriorNosocomialityScore", "RuleofThumbScore")] <- "Nosocomiality Detection"
 figuredata$Type[figuredata$name %in% c("GeneralScore", "PrevPriorGeneralScore", "DefaultPriorGeneralScore")] <- "Source Detection"
 figuredata$Type[figuredata$name %in% c("NOSTRATreeScore", "PrevTreeScore", "DefaultTreeScore")] <- "Transmission Tree Detection"
+figuredata$Day[figuredata$Day == 10] <- ">9"
 
 ##tidy up names for figure
 figuredata$name[figuredata$name %in% c("NOSTRATreeScore")] <- "NOSTRA"
@@ -395,6 +428,7 @@ figuredata$name[figuredata$name %in% c("DefaultTreeScore")] <- "Naïve Prior"
 figuredata$name[figuredata$name %in% c("RuleofThumbScore")] <- "96hr Categorisation"
 
 figuredata$name <- factor(figuredata$name, levels = c("NOSTRA", "Prevalence Prior", "Naïve Prior", "96hr Categorisation"))
+figuredata$Day <- factor(figuredata$Day, levels = c("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", ">9"))
 
 figuredata_means <- figuredata %>% group_by(name, Type, Day) %>% summarise(value=mean(value))
 
@@ -403,6 +437,9 @@ plot2 <- ggplot(figuredata, aes(name, value)) +
   ylab("Brier Score") +
   xlab("") +
   theme_bw() +
-  geom_jitter(aes(colour = Prevalence), height = 0, width = 0.1) +
-  geom_point(data = figuredata_means, size = 4) +
-  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1))
+  geom_jitter(height = 0, width = 0.1) +
+  geom_point(data = figuredata_means, size = 2.5, colour = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
+  scale_y_continuous(sec.axis = sec_axis(~ . , name = "Days between admission and detection", breaks = NULL, labels = NULL))
+
+ggsave(plot = plot2, filename = "NOSTRAFig4.png", dpi = 350, height = 15.15)
