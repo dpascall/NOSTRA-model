@@ -34,7 +34,7 @@ x_ai_likelihood_onset <- function(detection, MU = 1.434, SIGMA = 0.6612) {
 
 #genetics under non-infection - uses empirical A2B error
 x_ai_genetic_likelihood <- function(Neff = floor(0.5*(exp(2.5)+exp(4.5))), mutationrate = 6.677*10^(-4)/365, errorrate = 0.404, snpdifference, timedifference, alignmentlength, generationtime = 5.5, genomesize = 29811) {
-  return(ddelap(snpdifference, alpha = 2*mutationrate*generationtime*Neff*alignmentlength, beta = 1, lambda = errorrate + mutationrate*timedifference*alignmentlength, log = T))
+  return(ddelap(snpdifference, alpha = 1, beta = 2*mutationrate*generationtime*Neff*alignmentlength, lambda = errorrate + mutationrate*timedifference*alignmentlength, log = T))
 }
 
 #modified a2b likelihood - continuous and only certain locations - TOST distribution changed to scaled t per Ferretti et al
