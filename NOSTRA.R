@@ -126,14 +126,14 @@ likelihood_model <- function(epidata, locationdata, priors, number_of_hypotheses
                                                  C = as.numeric(difftime(as.Date(epidata$onset_date[1], format = "%d/%m/%Y"),
                                                                          as.Date(startdate, format = "%Y-%m-%d"),
                                                                          units = "days")) + 1) +
-          x_ai_genetic_likelihood(snpdifference = epidata$snpdifference[q + 1], timedifference = epidata$timediff[q + 1], alignmentlength = epidata$alignmentlength[q + 1])
+          x_ai_genetic_likelihood(snpdifference = epidata$snpdifference[q + 1], timedifference = epidata$timedifference[q + 1], alignmentlength = epidata$alignmentlength[q + 1])
       } else if (is.na(epidata$snpdifference[q + 1]) & !is.na(epidata$detection[q + 1])) {
         l_prime[q] <- x_ai_likelihood_not_target(detection = epidata$detection[q + 1], 
                                                  C = as.numeric(difftime(as.Date(epidata$onset_date[1], format = "%d/%m/%Y"),
                                                                          as.Date(startdate, format = "%Y-%m-%d"),
                                                                          units = "days")) + 1) + log(1)
       } else if (!is.na(epidata$snpdifference[q + 1]) & is.na(epidata$detection[q + 1])) {
-        l_prime[q] <- x_ai_genetic_likelihood(snpdifference = epidata$snpdifference[q + 1], timedifference = epidata$timediff[q + 1], alignmentlength = epidata$alignmentlength[q + 1]) + 
+        l_prime[q] <- x_ai_genetic_likelihood(snpdifference = epidata$snpdifference[q + 1], timedifference = epidata$timedifference[q + 1], alignmentlength = epidata$alignmentlength[q + 1]) + 
           log(0.5^(as.numeric(difftime(as.Date(startdate, format = "%Y-%m-%d"), 
                                        as.Date(epidata$onset_date[1], format = "%d/%m/%Y"), 
                                        units = "days")) + 1)) +
