@@ -271,7 +271,7 @@ for (x in seq_len(nrow(conditions))) {
     target <- unique(target)
     transtrees[[i]] <- induced_subgraph(transtrees[[i]], target)
     ##convert time to SNPs
-    E(transtrees[[i]])$weight <- rpois(1, mu * E(transtrees[[i]])$weight)
+    E(transtrees[[i]])$weight <- rpois(E(transtrees[[i]])$weight, mu * E(transtrees[[i]])$weight)
   }
   ##warnings about -Inf working as designed
   
@@ -377,10 +377,10 @@ for (x in seq_len(nrow(conditions))) {
         }
         for (l in seq_len(ncol(detectioncombinations))) {
           SNPs[rownames(SNPs) %in% as.character(V(wardtrees[[j]])$To[detectioncombinations[1,l]]), colnames(SNPs) %in% as.character(V(wardtrees[[j]])$To[detectioncombinations[2,l]])] <-
-            sum(E(wardtrees[[j]])$weight[shortest_paths(wardtrees[[j]], detectioncombinations[1,l], detectioncombinations[2,], mode = "all", output = "both")$epath[[1]]])
+            sum(E(wardtrees[[j]])$weight[shortest_paths(wardtrees[[j]], detectioncombinations[1,l], detectioncombinations[2,l], mode = "all", output = "both")$epath[[1]]])
         }
         for (l in seq_along(detectionverts)) {
-          SNPs[rownames(SNPs) %in% as.character(detectionverts[l]), !colnames(SNPs) %in% as.character(unique(V(wardtrees[[j]])$To[V(wardtrees[[j]])$Event %in% "Detection"]))] <- sum(E(wardtrees[[j]])$weight[shortest_paths(wardtrees[[j]], detectionverts[l], which.min(as.Date(V(wardtrees[[j]])$Date)), mode = "all", output = "both")$epath[[1]]])
+          SNPs[rownames(SNPs) %in% as.character(V(wardtrees[[j]])$To[detectionverts[l]]), !colnames(SNPs) %in% as.character(unique(V(wardtrees[[j]])$To[V(wardtrees[[j]])$Event %in% "Detection"]))] <- sum(E(wardtrees[[j]])$weight[shortest_paths(wardtrees[[j]], detectionverts[l], which.min(as.Date(V(wardtrees[[j]])$Date)), mode = "all", output = "both")$epath[[1]]])
         }
       }
     }
